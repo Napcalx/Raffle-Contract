@@ -37,14 +37,12 @@ make deploy
 
 ## Testing
 
-We talk about 4 test tiers in the video.
+There 4 test tiers
 
 1. Unit
 2. Integration
 3. Forked
 4. Staging
-
-This repo we cover #1 and #3.
 
 ```
 forge test
