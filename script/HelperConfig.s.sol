@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.19;
+
+import {Script} from "forge-std/Script.sol";
+import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
+import {LinkToken} from "test/mocks/Link.sol";
+
+abstract contract CodeConstants {
+    /**VRF Mock Values */
+    uint96 public MOCK_BASE_FEE = 0.4 ether;
+    uint96 public MOCK_GAS_PRICE_LINK = 1e9;
+    // LINK /ETH price
+    int256 public MOCK_WEI_PER_UINT_LINK = 4e15;
+
+    uint256 public constant ETH_SEPOLIA_CHAIN_ID = 11155111;
+    uint256 public constant AVALANCHE_FUJI_CHAIN_ID = 43113;
+    uint256 public constant LOCAL_CHAIN_ID = 31337;
+}
+
+contract HelperConfig is Script, CodeConstants {
+    error HelperConfig__InvalidChainId();
+
+    struct NetworkConfig {
+        uint256 entranceFee;
+        uint256 interval;
+        address vrfCoordinator;
+        bytes32 gasLane;
+        uint256 subscriptionId;
+        uint32 callbackGasLimit;
+        address link;
+        address account;
+    }
+
+    NetworkConfig public localNetworkConfig;
+    mapping(uint256 chainId => NetworkConfig) public networkConfigs;
+
+    constructor() {
+        networkConfigs[ETH_SEPOLIA_CHAIN_ID] = getSepoliaEthConfig();
+        networkConfigs[AVALANCHE_FUJI_CHAIN_ID] = getAvalancheFujiConfig();
+    }
+
+    function getConfigByChainId(
+        uint256 chainId
+    ) public returns (NetworkConfig memory) {
+        if (networkConfigs[chainId].vrfCoordinator != address(0)) {
+            return networkConfigs[chainId];
+        } else if (chainId == LOCAL_CHAIN_ID) {
+            return getOrCreateAnvilEthConfig();
+        } else {
+            revert HelperConfig__InvalidChainId();
+        }
+    }
+
+    function getConfig() public returns (NetworkConfig memory) {
+        return getConfigByChainId(block.chainid);
+    }
+
+    function getSepoliaEthConfig() public pure returns (NetworkConfig memory) {
+        return
+            NetworkConfig({
+                entranceFee: 0.01 ether, // 1e16
+                interval: 30, // 30 seconds
+                vrfCoordinator: 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B,
+                gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae,
+                subscriptionId: 72410744486191805461271690184436777494627711048772993198464152785560674120113,
+                callbackGasLimit: 500000, // 500,000 gas
+                link: 0x779877A7B0D9E8603169DdbD7836e478b4624789,
+                account: 0x6AbfFc2e29842932754E125327099899fB08Ae01
+            });
+    }
+
+    function getAvalancheFujiConfig()
+        public
+        pure
+        returns (NetworkConfig memory)
+    {
+        return
+            NetworkConfig({
+                entranceFee: 0.01 ether,
+                interval: 50,
+                vrfCoordinator: 0x2eD832Ba664535e5886b75D64C46EB9a228C2610,
+                gasLane: 0x354d2f95da55398f44b7cff77da56283d9c6c829a4bdf1bbcaf2ad6a4d081f61,
+                subscriptionId: 2,
+                callbackGasLimit: 800000,
+                link: 0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846,
+                account: 0x6AbfFc2e29842932754E125327099899fB08Ae01
+            });
+    }
+
+    function getOrCreateAnvilEthConfig() public returns (NetworkConfig memory) {
+        // Check to see if set an active network config
+        if (localNetworkConfig.vrfCoordinator != address(0)) {
+            return localNetworkConfig;
+        }
+
+        // Deploy mock
+        vm.startBroadcast();
+        VRFCoordinatorV2_5Mock vrfCoordinatorMock = new VRFCoordinatorV2_5Mock(
+            MOCK_BASE_FEE,
+            MOCK_GAS_PRICE_LINK,
+            MOCK_WEI_PER_UINT_LINK
+        );
+        LinkToken linkToken = new LinkToken();
+        vm.stopBroadcast();
+
+        localNetworkConfig = NetworkConfig({
+            entranceFee: 0.01 ether,
+            interval: 50,
+            vrfCoordinator: address(vrfCoordinatorMock),
+            // Doesnt matter
+            gasLane: 0x354d2f95da55398f44b7cff77da56283d9c6c829a4bdf1bbcaf2ad6a4d081f61,
+            subscriptionId: 2,
+            callbackGasLimit: 800000,
+            link: address(linkToken),
+            account: 0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38
+        });
+        return localNetworkConfig;
+    }
+}
